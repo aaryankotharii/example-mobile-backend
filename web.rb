@@ -218,17 +218,14 @@ post '/create_payment_intent' do
 
   supported_payment_methods = payload[:supported_payment_methods] ? payload[:supported_payment_methods].split(",") : nil
 
-  # Calculate how much to charge the customer
-  amount = calculate_price(payload[:products], payload[:shipping])
-
   begin
     payment_intent = Stripe::PaymentIntent.create(
-      :amount => amount,
-      :currency => currency_for_country(payload[:country]),
+      :amount => payload[:amount],
+      :currency => payload[:currency],
       :customer => payload[:customer_id] || @customer.id,
-      :description => "Example PaymentIntent",
+      :description => "Create PaymentIntent",
       :capture_method => ENV['CAPTURE_METHOD'] == "manual" ? "manual" : "automatic",
-      payment_method_types: supported_payment_methods ? supported_payment_methods : payment_methods_for_country(payload[:country]),
+      payment_method_types: supported_payment_methods,
       :metadata => {
         :order_id => '5278735C-1F40-407D-933A-286E463E72D8',
       }.merge(payload[:metadata] || {}),
@@ -328,108 +325,3 @@ def generate_payment_response(payment_intent)
   end
 end
 
-# ===== Helpers
-
-# Our example apps sell emoji apparel; this hash lets us calculate the total amount to charge.
-EMOJI_STORE = {
-  "👕" => 2000,
-  "👖" => 4000,
-  "👗" => 3000,
-  "👞" => 700,
-  "👟" => 600,
-  "👠" => 1000,
-  "👡" => 2000,
-  "👢" => 2500,
-  "👒" => 800,
-  "👙" => 3000,
-  "💄" => 2000,
-  "🎩" => 5000,
-  "👛" => 5500,
-  "👜" => 6000,
-  "🕶" => 2000,
-  "👚" => 2500,
-}
-
-def price_lookup(product)
-  price = EMOJI_STORE[product]
-  raise "Can't find price for %s (%s)" % [product, product.ord.to_s(16)] if price.nil?
-  return price
-end
-
-def calculate_price(products, shipping)
-  amount = 1099  # Default amount.
-
-  if products
-    amount = products.reduce(0) { | sum, product | sum + price_lookup(product) }
-  end
-
-  if shipping
-    case shipping
-    when "fedex"
-      amount = amount + 599
-    when "fedex_world"
-      amount = amount + 2099
-    when "ups_worldwide"
-      amount = amount + 1099
-    end
-  end
-
-  return amount
-end
-
-def currency_for_country(country)
-  # Determine currency to use. Generally a store would charge different prices for
-  # different countries, but for the sake of simplicity we'll charge X of the local currency.
-
-  case country
-  when 'us'
-    'usd'
-  when 'mx'
-    'mxn'
-  when 'my'
-    'myr'
-  when 'at', 'be', 'de', 'es', 'it', 'nl', 'pl'
-    'eur'
-  when 'au'
-    'aud'
-  when 'gb'
-    'gbp'
-  when 'in'
-    'inr'
-  else
-    'usd'
-  end
-end
-
-def payment_methods_for_country(country)
-  case country
-  when 'us'
-    %w[card]
-  when 'mx'
-    %w[card oxxo]
-  when 'my'
-    %w[card fpx grabpay]
-  when 'nl'
-    %w[card ideal sepa_debit sofort]
-  when 'au'
-    %w[card au_becs_debit]
-  when 'gb'
-    %w[card paypal bacs_debit]
-  when 'es', 'it'
-    %w[card paypal sofort]
-  when 'pl'
-    %w[card paypal p24]
-  when 'be'
-    %w[card paypal sofort bancontact]
-  when 'de'
-    %w[card paypal sofort giropay]
-  when 'at'
-    %w[card paypal sofort eps]
-  when 'sg'
-    %w[card alipay grabpay]
-  when 'in'
-    %w[card upi netbanking]
-  else
-    %w[card]
-  end
-end
